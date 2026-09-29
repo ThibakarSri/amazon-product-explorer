@@ -1,0 +1,20 @@
+name: Build and verify
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: dotnet build src/AmazonProductExplorer --configuration Release
+      - run: dotnet run --project tests/AmazonProductExplorer.Checks --configuration Release
+      - run: python scripts/smoke_test.py

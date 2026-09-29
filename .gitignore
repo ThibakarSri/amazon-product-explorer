@@ -1,0 +1,21 @@
+# Build output and local runtime
+**/bin/
+**/obj/
+.tools/
+.dotnet/
+.nuget/
+.test-artifacts/
+**/App_Data/
+**/appsettings.Local.json
+**/appsettings.Development.json
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+secrets.json
+*.user
+*.suo
+.vs/
+.idea/
+.DS_Store
+*.log
