@@ -132,6 +132,20 @@ Keep credentials out of `appsettings.json`, JavaScript, screenshots, issues and 
 
 ## 8. Run a small live search
 
+Before starting a paid search, check your saved credentials with this free account request:
+
+```sh
+dotnet run --project src/AmazonProductExplorer -- --check-oxylabs
+```
+
+This command loads the same Development configuration as the app, contacts Oxylabs' [free usage endpoint](https://developers.oxylabs.io/products/web-scraper-api/usage-and-billing/usage-statistics), and exits without opening a web server or submitting a scrape. It prints no passwords or account statistics. Success confirms access to that endpoint; it does not guarantee remaining credits or Amazon scraping permissions.
+
+If it reports **HTTP 401**, open the Oxylabs dashboard's **Web Scraper API** API-user credentials. Copy the API username and its matching password, or reset that API user's password if needed. Run `./scripts/setup-oxylabs.sh` to replace both saved values, and repeat the check. Your dashboard email/password, proxy credentials and API tokens are different from the Basic-auth API user credentials this app expects. Do not post credentials or `dotnet user-secrets list` output in screenshots or issues.
+
+If it reports **HTTP 403**, check the account's access to Web Scraper API and the requested resource with Oxylabs. Changing a password is not necessarily the remedy for 403. See [Oxylabs' status-code meanings](https://developers.oxylabs.io/products/web-scraper-api/response-codes).
+
+Run these commands from the clone you actually use; the project path is relative to your current directory. After updating credentials, stop the old server with **Control+C** and start it again. The **Live Amazon** toggle checks only whether credential values are present, not whether Oxylabs accepts them. Old failed search results remain unchanged; submit a new search after fixing credentials.
+
 1. Refresh the browser and select **Live** mode.
 2. Search for `wireless headphones` with a target of **10 products** and ZIP `10001`.
 3. Watch the progress while the server finds unique products and retrieves their details.
@@ -192,7 +206,8 @@ A later CrewAI integration could be a separate Python service that receives sani
 | Browser cannot reach localhost | Keep the server running and read its “Now listening on” address. Check the terminal for startup errors. |
 | Port 5080 is already in use | Stop the other copy of this app. Alternatively run `dotnet run --project src/AmazonProductExplorer -- --urls http://localhost:5081` and visit port 5081. |
 | Live mode says credentials are missing | Set both secrets for this project, restart the app and use its Development launch profile. Do not add the credentials to the browser. |
-| Oxylabs returns 401 or 403 | Check the API username/password and your account's Web Scraper API access in the dashboard. Dashboard login credentials may not be the API credentials. |
+| Oxylabs returns 401 | Authentication was rejected. Replace both Web Scraper API user credentials, run the free `--check-oxylabs` check, then restart the server. |
+| Oxylabs returns 403 | The account cannot access the requested resource. Check Web Scraper API access/account status with Oxylabs. |
 | Provider reports a usage or account limit | Check your account credits, plan and access with Oxylabs. Repeatedly submitting the same search will not fix an account limitation. |
 | Live work times out or finishes partly | Inspect the job message and completed rows. A temporary provider or network failure can occur. Resolve the cause before submitting another paid search. |
 | Availability is Unknown | The response did not contain a recognized availability message. The app deliberately avoids inferring stock from a price. |

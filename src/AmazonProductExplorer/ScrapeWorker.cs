@@ -26,7 +26,10 @@ public sealed class ScrapeWorker(JobStore store, OxylabsClient client, OxylabsOp
             }
             catch (Exception ex)
             {
-                logger.LogWarning("Job {JobId} stopped with error type {ErrorType}.", id, ex.GetType().Name);
+                if (ex is ScraperException)
+                    logger.LogWarning("Job {JobId} stopped: {Reason}", id, ex.Message);
+                else
+                    logger.LogWarning("Job {JobId} stopped with error type {ErrorType}.", id, ex.GetType().Name);
                 store.Update(id, job =>
                 {
                     job.Status = job.Products.Count > 0 ? "partial" : "failed";

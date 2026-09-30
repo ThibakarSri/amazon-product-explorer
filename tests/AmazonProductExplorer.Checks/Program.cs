@@ -94,13 +94,56 @@ var checks = new List<(string Name, Action Run)>
     })
 };
 
+checks.Add(("free account check uses only the read-only stats endpoint", () =>
+{
+    var count = 0;
+    using var http = new HttpClient(new StubHandler(request =>
+    {
+        count++;
+        Equal(HttpMethod.Get, request.Method);
+        Equal("/v2/stats", request.RequestUri!.AbsolutePath);
+        Equal("Basic", request.Headers.Authorization!.Scheme);
+        return new(System.Net.HttpStatusCode.OK) { Content = new StringContent("{}") };
+    })) { BaseAddress = new Uri("https://data.oxylabs.io/") };
+    new OxylabsClient(http, new() { Username = "test-user", Password = "test-password" })
+        .CheckAccessAsync(CancellationToken.None).GetAwaiter().GetResult();
+    Equal(1, count);
+}));
+foreach (var status in new[] { System.Net.HttpStatusCode.Unauthorized, System.Net.HttpStatusCode.Forbidden })
+{
+    checks.Add(($"HTTP {(int)status} gives a distinct safe error without retrying submission", () =>
+    {
+        var count = 0;
+        using var http = new HttpClient(new StubHandler(request =>
+        {
+            count++;
+            Equal(HttpMethod.Post, request.Method);
+            return new(status) { Content = new StringContent("test-password raw-provider-response") };
+        })) { BaseAddress = new Uri("https://data.oxylabs.io/") };
+        try
+        {
+            new OxylabsClient(http, new() { Username = "test-user", Password = "test-password" })
+                .SearchAsync("headphones", "10001", 1, CancellationToken.None).GetAwaiter().GetResult().Dispose();
+            throw new Exception("Expected an authentication/access error.");
+        }
+        catch (ScraperException exception)
+        {
+            Equal(true, exception.Message.Contains($"HTTP {(int)status}"));
+            Equal(false, exception.Message.Contains("test-password"));
+            Equal(false, exception.Message.Contains("raw-provider-response"));
+            Equal(true, exception.Message.Contains(status == System.Net.HttpStatusCode.Unauthorized ? "authentication was rejected" : "not allowed to access"));
+        }
+        Equal(1, count);
+    }));
+}
+
 var failed = 0;
 foreach (var (name, run) in checks)
 {
     try { run(); Console.WriteLine($"PASS {name}"); }
     catch (Exception exception) { failed++; Console.Error.WriteLine($"FAIL {name}: {exception.Message}"); }
 }
-Console.WriteLine($"{checks.Count - failed}/{checks.Count} parser checks passed.");
+Console.WriteLine($"{checks.Count - failed}/{checks.Count} checks passed.");
 return failed == 0 ? 0 : 1;
 
 static JsonDocument Search(string rows) => JsonDocument.Parse(
@@ -117,4 +160,10 @@ static void Throws(Action action)
 {
     try { action(); } catch (ScraperException) { return; }
     throw new Exception("Expected a safe parser error.");
+}
+
+sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        => Task.FromResult(respond(request));
 }

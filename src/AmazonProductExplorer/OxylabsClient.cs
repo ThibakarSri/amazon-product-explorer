@@ -8,6 +8,31 @@ namespace AmazonProductExplorer;
 /// <summary>Push-Pull API: submit once, poll status, then retrieve parsed results over HTTPS.</summary>
 public sealed class OxylabsClient(HttpClient http, OxylabsOptions options)
 {
+    /// <summary>Uses the free usage endpoint; does not submit a scraping job or expose account statistics.</summary>
+    public async Task CheckAccessAsync(CancellationToken token)
+    {
+        if (!options.IsConfigured)
+            throw new ScraperException("Oxylabs credentials are missing. Save the Web Scraper API username and password using scripts/setup-oxylabs.sh.");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        try
+        {
+            using var result = await SendAsync(HttpMethod.Get, "v2/stats", null, timeout.Token);
+        }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested)
+        {
+            throw new ScraperException("The Oxylabs connection check timed out. No scraping job was submitted.");
+        }
+        catch (HttpRequestException)
+        {
+            throw new ScraperException("Could not reach Oxylabs. Check your network connection. No scraping job was submitted.");
+        }
+        catch (JsonException)
+        {
+            throw new ScraperException("Oxylabs returned an unexpected response to the connection check. No scraping job was submitted.");
+        }
+    }
+
     public Task<JsonDocument> SearchAsync(string query, string zipCode, int page, CancellationToken token) =>
         ExecuteAsync(new
         {
@@ -85,7 +110,8 @@ public sealed class OxylabsClient(HttpClient http, OxylabsOptions options)
             {
                 var message = response.StatusCode switch
                 {
-                    HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => "Oxylabs rejected authentication or account access. Check your API credentials and subscription.",
+                    HttpStatusCode.Unauthorized => "Oxylabs HTTP 401: authentication was rejected. Check or reset your Web Scraper API username and password in the Oxylabs dashboard, save both again, then restart this app. Use API user credentials, not your dashboard email/password, proxy credentials or an API token.",
+                    HttpStatusCode.Forbidden => "Oxylabs HTTP 403: this account is not allowed to access the requested resource. Check Web Scraper API access and account status with Oxylabs. This response does not establish that the password is wrong.",
                     HttpStatusCode.TooManyRequests => "Oxylabs rate-limited the request. Lower concurrency or wait before starting another job.",
                     HttpStatusCode.BadRequest => "Oxylabs rejected the request parameters. Check the current API documentation and your account capabilities.",
                     _ => $"Oxylabs returned HTTP {(int)response.StatusCode}. Check its dashboard for details."

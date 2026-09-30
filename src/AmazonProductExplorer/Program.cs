@@ -3,7 +3,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using AmazonProductExplorer;
 
-var builder = WebApplication.CreateBuilder(args);
+var checkOxylabs = args.Contains("--check-oxylabs", StringComparer.Ordinal);
+var builder = WebApplication.CreateBuilder(args.Where(arg => arg != "--check-oxylabs").ToArray());
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 4096);
 var oxylabs = builder.Configuration.GetSection("Oxylabs").Get<OxylabsOptions>() ?? new OxylabsOptions();
 oxylabs.Validate();
@@ -16,6 +17,22 @@ builder.Services.AddHttpClient<OxylabsClient>(http =>
 }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddHostedService<ScrapeWorker>();
 var app = builder.Build();
+
+if (checkOxylabs)
+{
+    try
+    {
+        await app.Services.GetRequiredService<OxylabsClient>().CheckAccessAsync(CancellationToken.None);
+        Console.WriteLine("Oxylabs account check succeeded (HTTP 200). No scraping job was submitted. This confirms usage-endpoint access, not Amazon scraping access or remaining credits.");
+    }
+    catch (ScraperException exception)
+    {
+        Console.Error.WriteLine(exception.Message);
+        Environment.ExitCode = 1;
+    }
+    finally { await app.DisposeAsync(); }
+    return;
+}
 
 app.Use(async (context, next) =>
 {
